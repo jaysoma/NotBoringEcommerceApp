@@ -36,12 +36,22 @@
     overflow-y:auto; font-size:12px; line-height:1.4;
     animation:flicker 7s infinite 0.3s;
     position:sticky; top:18px; max-height:calc(100vh - 36px);
+    display:flex; flex-direction:column; gap:0;
   }
-  .term-raw .raw-hdr{
+  .raw-hdr{
     color:var(--amb-dim); font-size:11px; border-bottom:1px solid var(--amb-dim);
-    padding-bottom:6px; margin-bottom:10px; letter-spacing:.05em;
+    padding-bottom:6px; margin-bottom:8px; letter-spacing:.05em; flex-shrink:0;
   }
-  .term-raw pre{margin:0;white-space:pre-wrap;word-break:break-all;font:inherit;color:var(--amb);}
+  .raw-log{
+    font-size:11px; color:var(--amb-dim); flex-shrink:0;
+    border-bottom:1px solid var(--amb-dim); padding-bottom:8px; margin-bottom:8px;
+  }
+  .raw-log .rw-req{color:var(--amb);}
+  .raw-log .rw-ok{color:var(--grn);}
+  .raw-log .rw-err{color:var(--red);}
+  .raw-log .rw-gen{color:var(--amb-dim);}
+  .raw-log .spin{display:inline-block;}
+  #rawOut{margin:0;white-space:pre-wrap;word-break:break-all;font:inherit;color:var(--amb);flex:1;}
   @media (prefers-reduced-motion:reduce){.term{animation:none}.term-raw{animation:none}.cursor{animation:none}}
   pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;}
   .ascii{color:var(--grn);font-size:clamp(5px,1.5vw,11px);line-height:1.05;
@@ -52,10 +62,6 @@
   .sys{color:var(--grn-dim);}
   .ok{color:var(--grn);}
   .err{color:var(--red);}
-  .wire{color:var(--amb);font-size:13px;margin:6px 0;
-    border-left:2px solid var(--amb-dim);padding-left:12px;}
-  .wire .dim{color:var(--amb-dim);}
-  .wire .stat-ok{color:var(--grn);} .wire .stat-err{color:var(--red);}
   .menu{margin:10px 0 4px;}
   .menu .item{padding:4px 8px;cursor:pointer;display:inline-block;
     border:1px solid transparent;}
@@ -63,8 +69,6 @@
     text-shadow:none;outline:none;}
   .menu .item .k{color:var(--amb);margin-right:8px;}
   .menu .item:hover .k,.menu .item:focus .k{color:var(--bg);}
-  .gen{color:var(--amb);margin:8px 0;}
-  .gen .spin{display:inline-block;}
   .card{border:1px solid var(--grn-dim);padding:10px 12px;margin:8px 0;overflow:hidden;}
   .card .name{color:var(--grn);font-weight:bold;}
   .card .price{color:var(--amb);float:right;}
@@ -81,7 +85,8 @@
 </head>
 <body class="crt">
 <div class="term-raw" id="rawPanel">
-  <div class="raw-hdr">RAW TOKEN STREAM &gt; /categories</div>
+  <div class="raw-hdr" id="rawHdr">DOS CONSOLE</div>
+  <div class="raw-log" id="rawLog"></div>
   <pre id="rawOut"></pre>
 </div>
 <div class="term" id="term">
@@ -96,14 +101,24 @@ const stream = document.getElementById("stream");
 const ps = document.getElementById("ps");
 const rawOut = document.getElementById("rawOut");
 const rawPanel = document.getElementById("rawPanel");
+const rawLog = document.getElementById("rawLog");
+const rawHdr = document.getElementById("rawHdr");
+
 function el(cls, html){const d=document.createElement("div");d.className=cls;d.innerHTML=html;stream.appendChild(d);scroll();return d;}
 function scroll(){window.scrollTo(0,document.body.scrollHeight);}
 function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+function rawLine(cls, html){
+  const d=document.createElement("div");d.className=cls;d.innerHTML=html;
+  rawLog.appendChild(d); rawPanel.scrollTop=rawPanel.scrollHeight; return d;
+}
+
 async function typeInto(node, text, speed=10){
   for(const ch of text){ node.innerHTML += esc(ch); if(!reduce) await sleep(speed); }
   scroll();
 }
 async function setPrompt(text){ ps.textContent=""; for(const c of text){ ps.textContent+=c; await sleep(20);} }
+
 const boot = [
   "NOTBIOS v8.010  (C) 2026 NotAmazon Systems",
   "Memory ............ 16384K OK",
@@ -118,6 +133,7 @@ const ART =
 ██║╚██╗██║██║   ██║   ██║       ██╔══██║██║╚██╔╝██║██╔══██║ ███╔╝  ██║   ██║██║╚██╗██║
 ██║ ╚████║╚██████╔╝   ██║       ██║  ██║██║ ╚═╝ ██║██║  ██║███████╗╚██████╔╝██║ ╚████║
 ╚═╝  ╚═══╝ ╚═════╝    ╚═╝       ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝`;
+
 async function start(){
   for(const b of boot){ el("line sys", b); await sleep(160); }
   await sleep(300);
@@ -126,43 +142,29 @@ async function start(){
   await sleep(400);
   loadCategories();
 }
-async function wireFetch(method, path){
-  const w = el("wire",
-    `<span>&gt; ${method} ${esc(path)} HTTP/1.1</span><br>`+
-    `<span class='dim'>&gt; Host: ${location.host||"localhost:8010"}</span>`);
-  const gen = el("gen", `<span class='spin'>&#9624;</span> AI is stocking the shelves &mdash; <span class='ms'>0</span>ms`);
-  const msEl = gen.querySelector(".ms");
+
+function startWire(path){
+  rawLog.innerHTML = "";
+  rawOut.textContent = "";
+  rawHdr.textContent = `RAW TOKEN STREAM > ${path}`;
+  rawLine("rw-req", `&gt; GET ${esc(path)} HTTP/1.1`);
+  rawLine("rw-req", `&gt; Host: ${location.host||"localhost:8010"}`);
   const frames=["▙","▛","▜","▟"]; let fi=0;
   const t0=performance.now();
+  const genEl = rawLine("rw-gen",`<span class='spin'>&#9624;</span> waiting &mdash; <span class='ms'>0</span>ms`);
+  const msEl = genEl.querySelector(".ms");
   const tick=setInterval(()=>{ msEl.textContent=Math.round(performance.now()-t0);
-    if(!reduce) gen.querySelector(".spin").textContent=frames[fi=(fi+1)%4]; },90);
-  try{
-    const res = await fetch(API+path,{method,headers:{Accept:"application/json"}});
-    clearInterval(tick); gen.remove();
-    const ms=(performance.now()-t0).toFixed(0);
-    const cls=res.ok?"stat-ok":"stat-err";
-    w.innerHTML += `<br><span class='${cls}'>&lt; ${res.status} ${res.statusText} &middot; ${ms}ms</span>`;
-    const data = await res.json();
-    return data;
-  }catch(err){
-    clearInterval(tick); gen.remove();
-    w.innerHTML += `<br><span class='stat-err'>&lt; CONNECTION FAILED &mdash; ${esc(err.message)}</span>`;
-    el("line err","  is the backend up on :8010?");
-    return null;
+    if(!reduce) genEl.querySelector(".spin").textContent=frames[fi=(fi+1)%4]; },90);
+  function finish(ok, ms){
+    clearInterval(tick); genEl.remove();
+    rawLine(ok?"rw-ok":"rw-err", `&lt; ${ok?"200 OK":"ERROR"} &middot; ${ms}ms`);
   }
+  return {t0, tick, finish};
 }
+
 async function loadCategories(){
   el("line sys","fetching catalog ...");
-  rawOut.textContent = "";
-  const w = el("wire",
-    `<span>&gt; GET /categories HTTP/1.1</span><br>`+
-    `<span class='dim'>&gt; Host: ${location.host||"localhost:8010"}</span>`);
-  const gen = el("gen", `<span class='spin'>&#9624;</span> AI is stocking the shelves &mdash; <span class='ms'>0</span>ms`);
-  const msEl = gen.querySelector(".ms");
-  const frames=["▙","▛","▜","▟"]; let fi=0;
-  const t0=performance.now();
-  const tick=setInterval(()=>{ msEl.textContent=Math.round(performance.now()-t0);
-    if(!reduce) gen.querySelector(".spin").textContent=frames[fi=(fi+1)%4]; },90);
+  const {t0, finish} = startWire("/categories");
 
   return new Promise(resolve=>{
     const es = new EventSource(API+"/categories");
@@ -175,9 +177,7 @@ async function loadCategories(){
       }
       if(msg.categories){
         es.close();
-        clearInterval(tick); gen.remove();
-        const ms=(performance.now()-t0).toFixed(0);
-        w.innerHTML += `<br><span class='stat-ok'>&lt; 200 OK &middot; ${ms}ms</span>`;
+        finish(true, (performance.now()-t0).toFixed(0));
         if(!Array.isArray(msg.categories)||!msg.categories.length){
           el("line err","catalog unavailable or wrong shape."); resolve(); return;
         }
@@ -200,13 +200,13 @@ async function loadCategories(){
     };
     es.onerror = ()=>{
       es.close();
-      clearInterval(tick); gen.remove();
-      w.innerHTML += `<br><span class='stat-err'>&lt; CONNECTION FAILED</span>`;
+      finish(false, (performance.now()-t0).toFixed(0));
       el("line err","  is the backend up on :8010?");
       resolve();
     };
   });
 }
+
 function findProducts(obj){
   if(Array.isArray(obj) && obj.length) return obj;
   if(obj && typeof obj==="object"){
@@ -217,23 +217,27 @@ function findProducts(obj){
   }
   return null;
 }
-const pick=(o,keys)=>{for(const k of keys){ for(const ok of Object.keys(o)){ if(ok.toLowerCase()===k){return o[ok];}}} return null;};
+function inferFields(it){
+  if(typeof it === "string") return {name:it, price:null, desc:null};
+  const vals = Object.entries(it).filter(([,v])=>typeof v==="string" && v.trim());
+  const priceEntry = vals.find(([k,v])=>/price|cost|amount/i.test(k) || /^\$[\d.,]+/.test(v));
+  const price = priceEntry ? priceEntry[1] : null;
+  const rest = vals.filter(e=>e!==priceEntry && !/category|type|tag/i.test(e[0]));
+  // prefer explicit name key, else shortest non-desc string
+  const nameEntry = rest.find(([k])=>/^(name|title|product|item)$/i.test(k))
+    ?? [...rest].sort((a,b)=>a[1].length-b[1].length)[0];
+  const name = nameEntry?.[1] ?? "Unnamed";
+  const descEntry = rest.filter(e=>e!==nameEntry).sort((a,b)=>b[1].length-a[1].length)[0];
+  const desc = descEntry?.[1] ?? null;
+  return {name, price, desc};
+}
+
 async function selectCategory(cat){
   document.onkeydown=null;
   el("line ok","&gt; "+esc(cat));
   await setPrompt(`browsing "${cat}"_`);
-  rawOut.textContent = "";
-  document.querySelector(".raw-hdr").textContent = `RAW TOKEN STREAM > /products/${cat.toLowerCase()}`;
   const path = `/products/${encodeURIComponent(cat.toLowerCase())}`;
-  const w = el("wire",
-    `<span>&gt; GET ${esc(path)} HTTP/1.1</span><br>`+
-    `<span class='dim'>&gt; Host: ${location.host||"localhost:8010"}</span>`);
-  const gen = el("gen", `<span class='spin'>&#9624;</span> AI is stocking the shelves &mdash; <span class='ms'>0</span>ms`);
-  const msEl = gen.querySelector(".ms");
-  const frames=["▙","▛","▜","▟"]; let fi=0;
-  const t0=performance.now();
-  const tick=setInterval(()=>{ msEl.textContent=Math.round(performance.now()-t0);
-    if(!reduce) gen.querySelector(".spin").textContent=frames[fi=(fi+1)%4]; },90);
+  const {t0, finish} = startWire(path);
 
   return new Promise(resolve=>{
     const es = new EventSource(API+path);
@@ -246,21 +250,15 @@ async function selectCategory(cat){
       }
       if(msg.products){
         es.close();
-        clearInterval(tick); gen.remove();
-        const ms=(performance.now()-t0).toFixed(0);
-        w.innerHTML += `<br><span class='stat-ok'>&lt; 200 OK &middot; ${ms}ms</span>`;
+        finish(true, (performance.now()-t0).toFixed(0));
         const items = msg.products || findProducts(msg);
         if(!items || !items.length){
-          el("line sys","raw response:");
-          el("wire","<pre>"+esc(JSON.stringify(msg,null,2))+"</pre>");
-          resolve(); return;
+          el("line sys","no products returned."); resolve(); return;
         }
         for(const it of items){
-          const name = (typeof it === "string") ? it : pick(it,["name","title","product","id"]) ?? "Unnamed";
-          const price = (typeof it === "string") ? null : pick(it,["price","cost","amount"]);
-          const desc = (typeof it === "string") ? null : pick(it,["description","desc","blurb","details"]);
+          const {name, price, desc} = inferFields(it);
           const card = el("card",
-            (price!=null?`<span class='price'>${esc(price)}</span>`:"")+
+            (price!=null ? `<span class='price'>${esc(price)}</span>` : "")+
             `<span class='name'></span>`+
             (desc?`<div class='desc'></div>`:""));
           await typeInto(card.querySelector(".name"), String(name), 12);
@@ -274,13 +272,13 @@ async function selectCategory(cat){
     };
     es.onerror = ()=>{
       es.close();
-      clearInterval(tick); gen.remove();
-      w.innerHTML += `<br><span class='stat-err'>&lt; CONNECTION FAILED</span>`;
+      finish(false, (performance.now()-t0).toFixed(0));
       el("line err","  is the backend up on :8010?");
       resolve();
     };
   });
 }
+
 function loadAgainHint(){ setPrompt("select another department above, or press R to restart_");
   document.onkeydown=e=>{ if(e.key==="r"||e.key==="R") location.reload(); }; }
 start();
