@@ -3,274 +3,192 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NOT AMAZON :: storefront</title>
+<title>NOT AMAZON :: terminal storefront</title>
 <style>
-  /* ---- design tokens -------------------------------------------------
-     two-phosphor scheme: GREEN is the storefront you see,
-     AMBER is the machinery underneath. that split is the whole point.
-  -------------------------------------------------------------------- */
   :root{
-    --bg:        #060a06;
-    --bg-panel:  #0a0f0a;
-    --grn:       #33ff66;   /* primary phosphor: the storefront UI   */
-    --grn-dim:   #1c7a39;   /* dimmed green: secondary text          */
-    --amb:       #ffb000;   /* amber phosphor: the wire / under hood */
-    --amb-dim:   #8a5f00;
-    --red:       #ff4136;   /* errors only                           */
-    --scan:      rgba(0,0,0,.28);
+    --bg:#060a06; --grn:#33ff66; --grn-dim:#1c7a39;
+    --amb:#ffb000; --amb-dim:#8a5f00; --red:#ff4136;
+    --scan:rgba(0,0,0,.30);
   }
-
   *{box-sizing:border-box;}
-  html,body{height:100%;}
+  html,body{height:100%;margin:0;}
   body{
-    margin:0;
-    background:var(--bg);
-    color:var(--grn);
+    background:var(--bg); color:var(--grn);
     font-family:"Courier New",Consolas,"DejaVu Sans Mono",monospace;
-    font-size:15px;
-    line-height:1.45;
-    letter-spacing:.02em;
-    overflow-x:hidden;
-    text-shadow:0 0 4px currentColor;
+    font-size:15px; line-height:1.5; letter-spacing:.02em;
+    text-shadow:0 0 4px currentColor; overflow-x:hidden;
   }
-
-  /* CRT dressing: scanlines + vignette + faint flicker ---------------- */
-  .crt::before{
-    content:"";position:fixed;inset:0;pointer-events:none;z-index:9;
-    background:repeating-linear-gradient(
-      to bottom, transparent 0 2px, var(--scan) 2px 3px);
-  }
-  .crt::after{
-    content:"";position:fixed;inset:0;pointer-events:none;z-index:9;
-    background:radial-gradient(ellipse at center,
-      transparent 60%, rgba(0,0,0,.55) 100%);
-  }
-  @keyframes flicker{
-    0%,100%{opacity:1;} 92%{opacity:1;} 93%{opacity:.86;} 94%{opacity:1;}
-  }
-  .wrap{animation:flicker 6s infinite;}
-  @media (prefers-reduced-motion:reduce){
-    .wrap{animation:none;} .cursor{animation:none;}
-  }
-
-  .wrap{max-width:1100px;margin:0 auto;padding:28px 22px 60px;}
-
-  /* boot log ---------------------------------------------------------- */
-  #boot{white-space:pre-wrap;color:var(--grn-dim);margin-bottom:18px;}
-  #boot .ok{color:var(--grn);}
-
-  /* header ascii ------------------------------------------------------ */
-  pre.ascii{
-    color:var(--grn);font-size:clamp(5px,1.4vw,11px);line-height:1.05;
-    margin:0 0 4px;overflow:hidden;white-space:pre;
-  }
-  .tagline{color:var(--grn-dim);margin:0 0 24px;font-size:13px;}
-  .tagline b{color:var(--amb);}
-
-  /* layout: storefront on the left, the wire on the right ------------- */
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
-  @media (max-width:820px){ .grid{grid-template-columns:1fr;} }
-
-  .panel{
-    border:1px solid var(--grn-dim);
-    background:var(--bg-panel);
-    padding:14px 16px;min-height:240px;
-  }
-  .panel.wire{border-color:var(--amb-dim);}
-  .panel h2{
-    margin:0 0 12px;font-size:12px;font-weight:normal;
-    letter-spacing:.18em;color:var(--grn-dim);
-    border-bottom:1px dashed var(--grn-dim);padding-bottom:6px;
-  }
-  .panel.wire h2{color:var(--amb-dim);border-color:var(--amb-dim);}
-
-  /* category menu ----------------------------------------------------- */
-  ul.menu{list-style:none;margin:0;padding:0;}
-  ul.menu li{
-    padding:6px 8px;cursor:pointer;color:var(--grn);
-    border:1px solid transparent;
-  }
-  ul.menu li:hover,ul.menu li:focus{
-    background:var(--grn);color:var(--bg);text-shadow:none;outline:none;
-  }
-  ul.menu li .key{color:var(--amb);margin-right:10px;}
-  ul.menu li:hover .key,ul.menu li:focus .key{color:var(--bg);}
-
-  /* the wire log: amber, raw, scrolling ------------------------------- */
-  #wire{
-    color:var(--amb);white-space:pre-wrap;word-break:break-word;
-    font-size:13px;max-height:360px;overflow-y:auto;margin:0;
-  }
-  #wire .req{color:var(--amb);}
-  #wire .meta{color:var(--amb-dim);}
-  #wire .status-ok{color:var(--grn);}
-  #wire .status-err{color:var(--red);}
-  #wire .json{color:var(--amb);}
-  #wire .divider{color:var(--amb-dim);}
-
-  /* prompt line ------------------------------------------------------- */
-  .prompt{margin-top:22px;color:var(--grn);}
-  .prompt .ps1{color:var(--amb);}
-  .cursor{display:inline-block;width:9px;height:1.05em;
-    background:var(--grn);vertical-align:text-bottom;margin-left:2px;
-    animation:blink 1.05s steps(1) infinite;}
-  @keyframes blink{50%{opacity:0;}}
-
+  .crt::before{content:"";position:fixed;inset:0;z-index:9;pointer-events:none;
+    background:repeating-linear-gradient(to bottom,transparent 0 2px,var(--scan) 2px 3px);}
+  .crt::after{content:"";position:fixed;inset:0;z-index:9;pointer-events:none;
+    background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.6) 100%);}
+  @keyframes flicker{0%,100%{opacity:1}92%{opacity:1}93%{opacity:.85}94%{opacity:1}}
+  .term{max-width:880px;margin:0 auto;padding:26px 22px 90px;animation:flicker 7s infinite;}
+  @media (prefers-reduced-motion:reduce){.term{animation:none}.cursor{animation:none}}
+  pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;}
+  .ascii{color:var(--grn);font-size:clamp(5px,1.5vw,11px);line-height:1.05;
+    white-space:pre;overflow:hidden;margin:6px 0 2px;}
+  .tag{color:var(--grn-dim);margin:0 0 20px;font-size:13px;}
+  .tag b{color:var(--amb);}
+  .line{margin:2px 0;}
+  .sys{color:var(--grn-dim);}
+  .ok{color:var(--grn);}
+  .err{color:var(--red);}
+  .wire{color:var(--amb);font-size:13px;margin:6px 0;
+    border-left:2px solid var(--amb-dim);padding-left:12px;}
+  .wire .dim{color:var(--amb-dim);}
+  .wire .stat-ok{color:var(--grn);} .wire .stat-err{color:var(--red);}
+  .menu{margin:10px 0 4px;}
+  .menu .item{padding:4px 8px;cursor:pointer;display:inline-block;
+    border:1px solid transparent;}
+  .menu .item:hover,.menu .item:focus{background:var(--grn);color:var(--bg);
+    text-shadow:none;outline:none;}
+  .menu .item .k{color:var(--amb);margin-right:8px;}
+  .menu .item:hover .k,.menu .item:focus .k{color:var(--bg);}
+  .gen{color:var(--amb);margin:8px 0;}
+  .gen .spin{display:inline-block;}
+  .card{border:1px solid var(--grn-dim);padding:10px 12px;margin:8px 0;overflow:hidden;}
+  .card .name{color:var(--grn);font-weight:bold;}
+  .card .price{color:var(--amb);float:right;}
+  .card .desc{color:var(--grn-dim);font-size:13px;margin-top:4px;}
+  .prompt{margin-top:18px;}
+  .ps1{color:var(--amb);}
+  .cursor{display:inline-block;width:9px;height:1.05em;background:var(--grn);
+    vertical-align:text-bottom;margin-left:3px;animation:blink 1s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0}}
   ::-webkit-scrollbar{width:8px;}
-  ::-webkit-scrollbar-track{background:var(--bg);}
   ::-webkit-scrollbar-thumb{background:var(--amb-dim);}
+  ::-webkit-scrollbar-track{background:var(--bg);}
 </style>
 </head>
 <body class="crt">
-<div class="wrap">
-
-  <div id="boot"></div>
-
-  <div id="screen" style="display:none;">
-    <pre class="ascii">███╗   ██╗ ██████╗ ████████╗     █████╗ ███╗   ███╗ █████╗ ███████╗ ██████╗ ███╗   ██╗
+<div class="term" id="term">
+  <div id="stream"></div>
+  <div class="prompt"><span class="ps1">C:\STORE&gt;</span> <span id="ps"></span><span class="cursor"></span></div>
+</div>
+<script>
+const API = "";
+const reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+const sleep = ms => new Promise(r=>setTimeout(r, reduce?0:ms));
+const stream = document.getElementById("stream");
+const ps = document.getElementById("ps");
+function el(cls, html){const d=document.createElement("div");d.className=cls;d.innerHTML=html;stream.appendChild(d);scroll();return d;}
+function scroll(){window.scrollTo(0,document.body.scrollHeight);}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+async function typeInto(node, text, speed=10){
+  for(const ch of text){ node.innerHTML += esc(ch); if(!reduce) await sleep(speed); }
+  scroll();
+}
+async function setPrompt(text){ ps.textContent=""; for(const c of text){ ps.textContent+=c; await sleep(20);} }
+const boot = [
+  "NOTBIOS v8.010  (C) 2026 NotAmazon Systems",
+  "Memory ............ 16384K OK",
+  "Inventory daemon .. <span class='ok'>ONLINE</span>",
+  "Qwen 2.5 (3B) ..... <span class='ok'>LOADED</span>",
+  "",
+];
+const ART =
+`███╗   ██╗ ██████╗ ████████╗     █████╗ ███╗   ███╗ █████╗ ███████╗ ██████╗ ███╗   ██╗
 ████╗  ██║██╔═══██╗╚══██╔══╝    ██╔══██╗████╗ ████║██╔══██╗╚══███╔╝██╔═══██╗████╗  ██║
 ██╔██╗ ██║██║   ██║   ██║       ███████║██╔████╔██║███████║  ███╔╝ ██║   ██║██╔██╗ ██║
 ██║╚██╗██║██║   ██║   ██║       ██╔══██║██║╚██╔╝██║██╔══██║ ███╔╝  ██║   ██║██║╚██╗██║
 ██║ ╚████║╚██████╔╝   ██║       ██║  ██║██║ ╚═╝ ██║██║  ██║███████╗╚██████╔╝██║ ╚████║
-╚═╝  ╚═══╝ ╚═════╝    ╚═╝       ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝</pre>
-    <p class="tagline">a storefront with <b>nothing to hide</b> &mdash; every click prints the wire</p>
-
-    <div class="grid">
-      <div class="panel">
-        <h2>STOREFRONT // CATEGORIES</h2>
-        <ul class="menu" id="menu">
-          <li class="meta" style="color:var(--grn-dim);cursor:default;">loading catalog&hellip;</li>
-        </ul>
-      </div>
-
-      <div class="panel wire">
-        <h2>THE WIRE // REQUEST &amp; RESPONSE</h2>
-        <pre id="wire"><span class="meta">// pick a category. the raw HTTP exchange shows up here.
-// nothing is faked &mdash; this is the actual request your
-// browser sends and the actual JSON your backend returns.</span></pre>
-      </div>
-    </div>
-
-    <div class="prompt">
-      <span class="ps1">C:\STOREFRONT&gt;</span>
-      <span id="ps-text"></span><span class="cursor"></span>
-    </div>
-  </div>
-
-</div>
-
-<script>
-/* ====================================================================
-   config: where the backend lives. served same-origin from FastAPI,
-   so relative paths just work. change if you proxy it elsewhere.
-   ==================================================================== */
-const API = ""; // same origin
-
-const reduce = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
-const sleep = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
-
-/* ---- boot sequence -------------------------------------------------- */
-const bootLines = [
-  "NOTBIOS (C) 2026 NotAmazon Systems, Inc.",
-  "BIOS Date 06/20/26  Ver: 8.010",
-  "",
-  "Detecting backend ...... <span class='ok'>FastAPI @ :8010</span>",
-  "Memory Test : 16384K OK",
-  "Mounting catalog ....... <span class='ok'>OK</span>",
-  "Honesty module ......... <span class='ok'>ENABLED</span>",
-  "",
-  "Starting STOREFRONT.SYS ...",
-];
-
-async function boot(){
-  const el = document.getElementById("boot");
-  for(const line of bootLines){
-    el.innerHTML += line + "\n";
-    await sleep(140);
-  }
-  await sleep(450);
-  document.getElementById("screen").style.display = "block";
-  typePrompt("ready. select a category above_");
+╚═╝  ╚═══╝ ╚═════╝    ╚═╝       ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝`;
+async function start(){
+  for(const b of boot){ el("line sys", b); await sleep(160); }
+  await sleep(300);
+  const a=document.createElement("pre");a.className="ascii";a.textContent=ART;stream.appendChild(a);
+  el("tag","an honest store &mdash; every click prints the wire and the AI builds the shelves live");
+  await sleep(400);
   loadCategories();
 }
-
-/* ---- prompt typewriter --------------------------------------------- */
-async function typePrompt(text){
-  const el = document.getElementById("ps-text");
-  el.textContent = "";
-  for(const ch of text){ el.textContent += ch; await sleep(28); }
-}
-
-/* ---- the wire: print a real request/response exchange -------------- */
-function wireLine(html){
-  const wire = document.getElementById("wire");
-  wire.innerHTML += html + "\n";
-  wire.scrollTop = wire.scrollHeight;
-}
-
-async function fetchAndLog(method, path){
-  const url = API + path;
-  wireLine(`<span class='divider'>${"-".repeat(46)}</span>`);
-  wireLine(`<span class='req'>&gt; ${method} ${path} HTTP/1.1</span>`);
-  wireLine(`<span class='meta'>&gt; Host: ${location.host || "localhost:8010"}</span>`);
-  wireLine(`<span class='meta'>&gt; Accept: application/json</span>`);
-  wireLine("");
-
-  const t0 = performance.now();
+async function wireFetch(method, path){
+  const w = el("wire",
+    `<span>&gt; ${method} ${esc(path)} HTTP/1.1</span><br>`+
+    `<span class='dim'>&gt; Host: ${location.host||"localhost:8010"}</span>`);
+  const gen = el("gen", `<span class='spin'>&#9624;</span> AI is stocking the shelves &mdash; <span class='ms'>0</span>ms`);
+  const msEl = gen.querySelector(".ms");
+  const frames=["\u2599","\u259B","\u259C","\u259F"]; let fi=0;
+  const t0=performance.now();
+  const tick=setInterval(()=>{ msEl.textContent=Math.round(performance.now()-t0);
+    if(!reduce) gen.querySelector(".spin").textContent=frames[fi=(fi+1)%4]; },90);
   try{
-    const res = await fetch(url, {method, headers:{Accept:"application/json"}});
-    const ms = (performance.now() - t0).toFixed(0);
-    const cls = res.ok ? "status-ok" : "status-err";
-    wireLine(`<span class='${cls}'>&lt; ${res.status} ${res.statusText}  (${ms}ms)</span>`);
-    wireLine(`<span class='meta'>&lt; content-type: ${res.headers.get("content-type")||"?"}</span>`);
-    wireLine("");
+    const res = await fetch(API+path,{method,headers:{Accept:"application/json"}});
+    clearInterval(tick); gen.remove();
+    const ms=(performance.now()-t0).toFixed(0);
+    const cls=res.ok?"stat-ok":"stat-err";
+    w.innerHTML += `<br><span class='${cls}'>&lt; ${res.status} ${res.statusText} &middot; ${ms}ms</span>`;
     const data = await res.json();
-    wireLine(`<span class='json'>${escapeHtml(JSON.stringify(data,null,2))}</span>`);
     return data;
   }catch(err){
-    wireLine(`<span class='status-err'>&lt; CONNECTION FAILED &mdash; ${escapeHtml(err.message)}</span>`);
-    wireLine(`<span class='meta'>  is the backend running on :8010?</span>`);
+    clearInterval(tick); gen.remove();
+    w.innerHTML += `<br><span class='stat-err'>&lt; CONNECTION FAILED &mdash; ${esc(err.message)}</span>`;
+    el("line err","  is the backend up on :8010?");
     return null;
   }
 }
-
-function escapeHtml(s){
-  return s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-}
-
-/* ---- load categories from the backend ------------------------------ */
 async function loadCategories(){
-  const data = await fetchAndLog("GET", "/categories");
-  const menu = document.getElementById("menu");
-  if(!data || !data.categories){
-    menu.innerHTML = "<li style='color:var(--red);cursor:default;'>catalog unavailable</li>";
+  el("line sys","fetching catalog ...");
+  const data = await wireFetch("GET","/categories");
+  if(!data || !Array.isArray(data.categories)){
+    el("line err","catalog unavailable or wrong shape."); return;
+  }
+  const menu = el("menu","");
+  el("line sys","pick a department:");
+  data.categories.forEach((cat,i)=>{
+    const item=document.createElement("span");
+    item.className="item";item.tabIndex=0;
+    item.innerHTML=`<span class='k'>[${i+1}]</span>${esc(cat)}`;
+    const go=()=>selectCategory(cat);
+    item.onclick=go;
+    item.onkeydown=e=>{if(e.key==="Enter")go();};
+    menu.appendChild(item);
+  });
+  document.onkeydown=e=>{const n=+e.key;
+    if(n>=1&&n<=data.categories.length) selectCategory(data.categories[n-1]);};
+  setPrompt("type a number or click a department_");
+}
+function findProducts(obj){
+  if(Array.isArray(obj) && obj.length) return obj;
+  if(obj && typeof obj==="object"){
+    for(const k of Object.keys(obj)){
+      const hit=findProducts(obj[k]);
+      if(hit) return hit;
+    }
+  }
+  return null;
+}
+const pick=(o,keys)=>{for(const k of keys){ for(const ok of Object.keys(o)){ if(ok.toLowerCase()===k){return o[ok];}}} return null;};
+async function selectCategory(cat){
+  document.onkeydown=null;
+  el("line ok","&gt; "+esc(cat));
+  await setPrompt(`browsing "${cat}"_`);
+  const data = await wireFetch("GET",`/products/${encodeURIComponent(cat.toLowerCase())}`);
+  if(!data){ return; }
+  const items = data.products || findProducts(data);
+  if(!items || !items.length){
+    el("line sys","raw response:");
+    el("wire","<pre>"+esc(JSON.stringify(data,null,2))+"</pre>");
     return;
   }
-  menu.innerHTML = "";
-  data.categories.forEach((cat, i) => {
-    const li = document.createElement("li");
-    li.tabIndex = 0;
-    li.innerHTML = `<span class='key'>[${i+1}]</span>${cat}`;
-    const fire = () => selectCategory(cat);
-    li.addEventListener("click", fire);
-    li.addEventListener("keydown", e => { if(e.key==="Enter") fire(); });
-    menu.appendChild(li);
-  });
-  // number-key selection, DOS menu style
-  document.addEventListener("keydown", e => {
-    const n = parseInt(e.key,10);
-    if(n>=1 && n<=data.categories.length) selectCategory(data.categories[n-1]);
-  });
+  for(const it of items){
+    const name = (typeof it === "string") ? it : pick(it,["name","title","product","id"]) ?? "Unnamed";
+    const price = (typeof it === "string") ? null : pick(it,["price","cost","amount"]);
+    const desc = (typeof it === "string") ? null : pick(it,["description","desc","blurb","details"]);
+    const card = el("card",
+      (price!=null?`<span class='price'>${esc(price)}</span>`:"")+
+      `<span class='name'></span>`+
+      (desc?`<div class='desc'></div>`:""));
+    await typeInto(card.querySelector(".name"), String(name), 12);
+    if(desc) await typeInto(card.querySelector(".desc"), String(desc), 6);
+    await sleep(120);
+  }
+  el("line sys",`${items.length} item(s) generated. press a number for another department.`);
+  loadAgainHint();
 }
-
-/* ---- selecting a category fires the products request --------------- */
-async function selectCategory(cat){
-  const slug = cat.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
-  typePrompt(`GET products in "${cat}"_`);
-  await fetchAndLog("GET", `/products/${slug}`);
-}
-
-boot();
+function loadAgainHint(){ setPrompt("select another department above, or press R to restart_");
+  document.onkeydown=e=>{ if(e.key==="r"||e.key==="R") location.reload(); }; }
+start();
 </script>
 </body>
 </html>
