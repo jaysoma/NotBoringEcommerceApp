@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOT AMAZON :: storefront</title>
+<style>
+  /* ---- design tokens -------------------------------------------------
+     two-phosphor scheme: GREEN is the storefront you see,
+     AMBER is the machinery underneath. that split is the whole point.
+  -------------------------------------------------------------------- */
+  :root{
+    --bg:        #060a06;
+    --bg-panel:  #0a0f0a;
+    --grn:       #33ff66;   /* primary phosphor: the storefront UI   */
+    --grn-dim:   #1c7a39;   /* dimmed green: secondary text          */
+    --amb:       #ffb000;   /* amber phosphor: the wire / under hood */
+    --amb-dim:   #8a5f00;
+    --red:       #ff4136;   /* errors only                           */
+    --scan:      rgba(0,0,0,.28);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--grn);
+    font-family:"Courier New",Consolas,"DejaVu Sans Mono",monospace;
+    font-size:15px;
+    line-height:1.45;
+    letter-spacing:.02em;
+    overflow-x:hidden;
+    text-shadow:0 0 4px currentColor;
+  }
+
+  /* CRT dressing: scanlines + vignette + faint flicker ---------------- */
+  .crt::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:9;
+    background:repeating-linear-gradient(
+      to bottom, transparent 0 2px, var(--scan) 2px 3px);
+  }
+  .crt::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:9;
+    background:radial-gradient(ellipse at center,
+      transparent 60%, rgba(0,0,0,.55) 100%);
+  }
+  @keyframes flicker{
+    0%,100%{opacity:1;} 92%{opacity:1;} 93%{opacity:.86;} 94%{opacity:1;}
+  }
+  .wrap{animation:flicker 6s infinite;}
+  @media (prefers-reduced-motion:reduce){
+    .wrap{animation:none;} .cursor{animation:none;}
+  }
+
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 22px 60px;}
+
+  /* boot log ---------------------------------------------------------- */
+  #boot{white-space:pre-wrap;color:var(--grn-dim);margin-bottom:18px;}
+  #boot .ok{color:var(--grn);}
+
+  /* header ascii ------------------------------------------------------ */
+  pre.ascii{
+    color:var(--grn);font-size:clamp(5px,1.4vw,11px);line-height:1.05;
+    margin:0 0 4px;overflow:hidden;white-space:pre;
+  }
+  .tagline{color:var(--grn-dim);margin:0 0 24px;font-size:13px;}
+  .tagline b{color:var(--amb);}
+
+  /* layout: storefront on the left, the wire on the right ------------- */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  @media (max-width:820px){ .grid{grid-template-columns:1fr;} }
+
+  .panel{
+    border:1px solid var(--grn-dim);
+    background:var(--bg-panel);
+    padding:14px 16px;min-height:240px;
+  }
+  .panel.wire{border-color:var(--amb-dim);}
+  .panel h2{
+    margin:0 0 12px;font-size:12px;font-weight:normal;
+    letter-spacing:.18em;color:var(--grn-dim);
+    border-bottom:1px dashed var(--grn-dim);padding-bottom:6px;
+  }
+  .panel.wire h2{color:var(--amb-dim);border-color:var(--amb-dim);}
+
+  /* category menu ----------------------------------------------------- */
+  ul.menu{list-style:none;margin:0;padding:0;}
+  ul.menu li{
+    padding:6px 8px;cursor:pointer;color:var(--grn);
+    border:1px solid transparent;
+  }
+  ul.menu li:hover,ul.menu li:focus{
+    background:var(--grn);color:var(--bg);text-shadow:none;outline:none;
+  }
+  ul.menu li .key{color:var(--amb);margin-right:10px;}
+  ul.menu li:hover .key,ul.menu li:focus .key{color:var(--bg);}
+
+  /* the wire log: amber, raw, scrolling ------------------------------- */
+  #wire{
+    color:var(--amb);white-space:pre-wrap;word-break:break-word;
+    font-size:13px;max-height:360px;overflow-y:auto;margin:0;
+  }
+  #wire .req{color:var(--amb);}
+  #wire .meta{color:var(--amb-dim);}
+  #wire .status-ok{color:var(--grn);}
+  #wire .status-err{color:var(--red);}
+  #wire .json{color:var(--amb);}
+  #wire .divider{color:var(--amb-dim);}
+
+  /* prompt line ------------------------------------------------------- */
+  .prompt{margin-top:22px;color:var(--grn);}
+  .prompt .ps1{color:var(--amb);}
+  .cursor{display:inline-block;width:9px;height:1.05em;
+    background:var(--grn);vertical-align:text-bottom;margin-left:2px;
+    animation:blink 1.05s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-track{background:var(--bg);}
+  ::-webkit-scrollbar-thumb{background:var(--amb-dim);}
+</style>
+</head>
+<body class="crt">
+<div class="wrap">
+
+  <div id="boot"></div>
+
+  <div id="screen" style="display:none;">
+    <pre class="ascii">███╗   ██╗ ██████╗ ████████╗     █████╗ ███╗   ███╗ █████╗ ███████╗ ██████╗ ███╗   ██╗
+████╗  ██║██╔═══██╗╚══██╔══╝    ██╔══██╗████╗ ████║██╔══██╗╚══███╔╝██╔═══██╗████╗  ██║
+██╔██╗ ██║██║   ██║   ██║       ███████║██╔████╔██║███████║  ███╔╝ ██║   ██║██╔██╗ ██║
+██║╚██╗██║██║   ██║   ██║       ██╔══██║██║╚██╔╝██║██╔══██║ ███╔╝  ██║   ██║██║╚██╗██║
+██║ ╚████║╚██████╔╝   ██║       ██║  ██║██║ ╚═╝ ██║██║  ██║███████╗╚██████╔╝██║ ╚████║
+╚═╝  ╚═══╝ ╚═════╝    ╚═╝       ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝</pre>
+    <p class="tagline">a storefront with <b>nothing to hide</b> &mdash; every click prints the wire</p>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>STOREFRONT // CATEGORIES</h2>
+        <ul class="menu" id="menu">
+          <li class="meta" style="color:var(--grn-dim);cursor:default;">loading catalog&hellip;</li>
+        </ul>
+      </div>
+
+      <div class="panel wire">
+        <h2>THE WIRE // REQUEST &amp; RESPONSE</h2>
+        <pre id="wire"><span class="meta">// pick a category. the raw HTTP exchange shows up here.
+// nothing is faked &mdash; this is the actual request your
+// browser sends and the actual JSON your backend returns.</span></pre>
+      </div>
+    </div>
+
+    <div class="prompt">
+      <span class="ps1">C:\STOREFRONT&gt;</span>
+      <span id="ps-text"></span><span class="cursor"></span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ====================================================================
+   config: where the backend lives. served same-origin from FastAPI,
+   so relative paths just work. change if you proxy it elsewhere.
+   ==================================================================== */
+const API = ""; // same origin
+
+const reduce = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+const sleep = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
+
+/* ---- boot sequence -------------------------------------------------- */
+const bootLines = [
+  "NOTBIOS (C) 2026 NotAmazon Systems, Inc.",
+  "BIOS Date 06/20/26  Ver: 8.010",
+  "",
+  "Detecting backend ...... <span class='ok'>FastAPI @ :8010</span>",
+  "Memory Test : 16384K OK",
+  "Mounting catalog ....... <span class='ok'>OK</span>",
+  "Honesty module ......... <span class='ok'>ENABLED</span>",
+  "",
+  "Starting STOREFRONT.SYS ...",
+];
+
+async function boot(){
+  const el = document.getElementById("boot");
+  for(const line of bootLines){
+    el.innerHTML += line + "\n";
+    await sleep(140);
+  }
+  await sleep(450);
+  document.getElementById("screen").style.display = "block";
+  typePrompt("ready. select a category above_");
+  loadCategories();
+}
+
+/* ---- prompt typewriter --------------------------------------------- */
+async function typePrompt(text){
+  const el = document.getElementById("ps-text");
+  el.textContent = "";
+  for(const ch of text){ el.textContent += ch; await sleep(28); }
+}
+
+/* ---- the wire: print a real request/response exchange -------------- */
+function wireLine(html){
+  const wire = document.getElementById("wire");
+  wire.innerHTML += html + "\n";
+  wire.scrollTop = wire.scrollHeight;
+}
+
+async function fetchAndLog(method, path){
+  const url = API + path;
+  wireLine(`<span class='divider'>${"-".repeat(46)}</span>`);
+  wireLine(`<span class='req'>&gt; ${method} ${path} HTTP/1.1</span>`);
+  wireLine(`<span class='meta'>&gt; Host: ${location.host || "localhost:8010"}</span>`);
+  wireLine(`<span class='meta'>&gt; Accept: application/json</span>`);
+  wireLine("");
+
+  const t0 = performance.now();
+  try{
+    const res = await fetch(url, {method, headers:{Accept:"application/json"}});
+    const ms = (performance.now() - t0).toFixed(0);
+    const cls = res.ok ? "status-ok" : "status-err";
+    wireLine(`<span class='${cls}'>&lt; ${res.status} ${res.statusText}  (${ms}ms)</span>`);
+    wireLine(`<span class='meta'>&lt; content-type: ${res.headers.get("content-type")||"?"}</span>`);
+    wireLine("");
+    const data = await res.json();
+    wireLine(`<span class='json'>${escapeHtml(JSON.stringify(data,null,2))}</span>`);
+    return data;
+  }catch(err){
+    wireLine(`<span class='status-err'>&lt; CONNECTION FAILED &mdash; ${escapeHtml(err.message)}</span>`);
+    wireLine(`<span class='meta'>  is the backend running on :8010?</span>`);
+    return null;
+  }
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+}
+
+/* ---- load categories from the backend ------------------------------ */
+async function loadCategories(){
+  const data = await fetchAndLog("GET", "/categories");
+  const menu = document.getElementById("menu");
+  if(!data || !data.categories){
+    menu.innerHTML = "<li style='color:var(--red);cursor:default;'>catalog unavailable</li>";
+    return;
+  }
+  menu.innerHTML = "";
+  data.categories.forEach((cat, i) => {
+    const li = document.createElement("li");
+    li.tabIndex = 0;
+    li.innerHTML = `<span class='key'>[${i+1}]</span>${cat}`;
+    const fire = () => selectCategory(cat);
+    li.addEventListener("click", fire);
+    li.addEventListener("keydown", e => { if(e.key==="Enter") fire(); });
+    menu.appendChild(li);
+  });
+  // number-key selection, DOS menu style
+  document.addEventListener("keydown", e => {
+    const n = parseInt(e.key,10);
+    if(n>=1 && n<=data.categories.length) selectCategory(data.categories[n-1]);
+  });
+}
+
+/* ---- selecting a category fires the products request --------------- */
+async function selectCategory(cat){
+  const slug = cat.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+  typePrompt(`GET products in "${cat}"_`);
+  await fetchAndLog("GET", `/products/${slug}`);
+}
+
+boot();
+</script>
+</body>
+</html>
