@@ -172,24 +172,33 @@ app = fastapi.FastAPI()
 
 @app.get("/categories")
 def get_categories():
-    prompt = "Invent 5 fun and creative department names for a fictional ecommerce store."
-    raw = ollama.generate("qwen2.5:7b", prompt, format="json")["response"]
-    nodes = extract_list(raw)
-    names = []
-    seen = set()
-    for node in nodes:
-        # Value-as-label: pick shortest non-empty value
-        name = min(
-            (v for v in node.values() if isinstance(v, str) and len(v) > 2),
-            key=len, default=None
-        )
-        # Key-as-label: if node is from a string array (single key, empty value), key is the label
-        if not name and len(node) == 1 and list(node.values())[0] == '':
-            name = list(node.keys())[0] if len(list(node.keys())[0]) > 2 else None
-        if name and name not in seen:
-            seen.add(name)
-            names.append(name)
-    return {"categories": names}
+    def stream():
+        prompt = "Invent 5 fun and creative department names for a fictional ecommerce store."
+        iterator = ollama.generate("qwen2.5:7b", prompt, stream=True, format="json")
+        full_response = ""
+        for chunk in iterator:
+            token = chunk["response"]
+            full_response += token
+            yield f"data: {json.dumps({'token': token})}\n\n"
+        nodes = extract_list(full_response)
+        names = []
+        seen = set()
+        for node in nodes:
+            name = min(
+                (v for v in node.values() if isinstance(v, str) and len(v) > 2),
+                key=len, default=None
+            )
+            if not name and len(node) == 1 and list(node.values())[0] == '':
+                name = list(node.keys())[0] if len(list(node.keys())[0]) > 2 else None
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+        yield f"data: {json.dumps({'categories': names})}\n\n"
+    return fastapi.responses.StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 @app.get("/")
 def read_root():
@@ -197,14 +206,25 @@ def read_root():
 
 @app.get("/products/{category}")
 def get_products(category: str):
-    prompt = f'Invent 5-7 fun fictional products with name and price for the "{category}" department of a whimsical ecommerce store.'
-    raw = ollama.generate("qwen2.5:7b", prompt, format="json")["response"]
-    nodes = extract_list(raw)
-    # Each node is a product dict — pass through as-is, filter out the category echo
-    return {"products": [
-        n for n in nodes
-        if not any(v.lower() == category.lower() for v in n.values() if isinstance(v, str))
-    ]}
+    def stream():
+        prompt = f'Invent 5-7 fun fictional products with name and price for the "{category}" department of a whimsical ecommerce store.'
+        iterator = ollama.generate("qwen2.5:7b", prompt, stream=True, format="json")
+        full_response = ""
+        for chunk in iterator:
+            token = chunk["response"]
+            full_response += token
+            yield f"data: {json.dumps({'token': token})}\n\n"
+        nodes = extract_list(full_response)
+        products = [
+            n for n in nodes
+            if not any(v.lower() == category.lower() for v in n.values() if isinstance(v, str))
+        ]
+        yield f"data: {json.dumps({'products': products})}\n\n"
+    return fastapi.responses.StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8010)

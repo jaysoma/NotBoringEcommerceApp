@@ -17,14 +17,32 @@
     font-family:"Courier New",Consolas,"DejaVu Sans Mono",monospace;
     font-size:15px; line-height:1.5; letter-spacing:.02em;
     text-shadow:0 0 4px currentColor; overflow-x:hidden;
+    display:flex; flex-direction:row; align-items:flex-start; gap:0;
   }
   .crt::before{content:"";position:fixed;inset:0;z-index:9;pointer-events:none;
     background:repeating-linear-gradient(to bottom,transparent 0 2px,var(--scan) 2px 3px);}
   .crt::after{content:"";position:fixed;inset:0;z-index:9;pointer-events:none;
     background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.6) 100%);}
   @keyframes flicker{0%,100%{opacity:1}92%{opacity:1}93%{opacity:.85}94%{opacity:1}}
-  .term{max-width:880px;margin:0 auto;padding:26px 22px 90px;animation:flicker 7s infinite;}
-  @media (prefers-reduced-motion:reduce){.term{animation:none}.cursor{animation:none}}
+  .term{flex:1;padding:26px 22px 90px;animation:flicker 7s infinite;min-width:0;}
+  .term-raw{
+    width:300px; flex-shrink:0;
+    border:1px solid var(--amb-dim);
+    border-radius:8px;
+    margin:18px 0 18px 18px;
+    padding:16px 14px 32px;
+    color:var(--amb); text-shadow:0 0 4px var(--amb);
+    box-shadow:0 0 12px rgba(255,176,0,.15), inset 0 0 24px rgba(0,0,0,.4);
+    overflow-y:auto; font-size:12px; line-height:1.4;
+    animation:flicker 7s infinite 0.3s;
+    position:sticky; top:18px; max-height:calc(100vh - 36px);
+  }
+  .term-raw .raw-hdr{
+    color:var(--amb-dim); font-size:11px; border-bottom:1px solid var(--amb-dim);
+    padding-bottom:6px; margin-bottom:10px; letter-spacing:.05em;
+  }
+  .term-raw pre{margin:0;white-space:pre-wrap;word-break:break-all;font:inherit;color:var(--amb);}
+  @media (prefers-reduced-motion:reduce){.term{animation:none}.term-raw{animation:none}.cursor{animation:none}}
   pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;}
   .ascii{color:var(--grn);font-size:clamp(5px,1.5vw,11px);line-height:1.05;
     white-space:pre;overflow:hidden;margin:6px 0 2px;}
@@ -62,6 +80,10 @@
 </style>
 </head>
 <body class="crt">
+<div class="term-raw" id="rawPanel">
+  <div class="raw-hdr">RAW TOKEN STREAM &gt; /categories</div>
+  <pre id="rawOut"></pre>
+</div>
 <div class="term" id="term">
   <div id="stream"></div>
   <div class="prompt"><span class="ps1">C:\STORE&gt;</span> <span id="ps"></span><span class="cursor"></span></div>
@@ -72,6 +94,8 @@ const reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
 const sleep = ms => new Promise(r=>setTimeout(r, reduce?0:ms));
 const stream = document.getElementById("stream");
 const ps = document.getElementById("ps");
+const rawOut = document.getElementById("rawOut");
+const rawPanel = document.getElementById("rawPanel");
 function el(cls, html){const d=document.createElement("div");d.className=cls;d.innerHTML=html;stream.appendChild(d);scroll();return d;}
 function scroll(){window.scrollTo(0,document.body.scrollHeight);}
 function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
@@ -84,7 +108,7 @@ const boot = [
   "NOTBIOS v8.010  (C) 2026 NotAmazon Systems",
   "Memory ............ 16384K OK",
   "Inventory daemon .. <span class='ok'>ONLINE</span>",
-  "Qwen 2.5 (3B) ..... <span class='ok'>LOADED</span>",
+  "Qwen 2.5 (7B) ..... <span class='ok'>LOADED</span>",
   "",
 ];
 const ART =
@@ -108,7 +132,7 @@ async function wireFetch(method, path){
     `<span class='dim'>&gt; Host: ${location.host||"localhost:8010"}</span>`);
   const gen = el("gen", `<span class='spin'>&#9624;</span> AI is stocking the shelves &mdash; <span class='ms'>0</span>ms`);
   const msEl = gen.querySelector(".ms");
-  const frames=["\u2599","\u259B","\u259C","\u259F"]; let fi=0;
+  const frames=["▙","▛","▜","▟"]; let fi=0;
   const t0=performance.now();
   const tick=setInterval(()=>{ msEl.textContent=Math.round(performance.now()-t0);
     if(!reduce) gen.querySelector(".spin").textContent=frames[fi=(fi+1)%4]; },90);
@@ -129,24 +153,59 @@ async function wireFetch(method, path){
 }
 async function loadCategories(){
   el("line sys","fetching catalog ...");
-  const data = await wireFetch("GET","/categories");
-  if(!data || !Array.isArray(data.categories)){
-    el("line err","catalog unavailable or wrong shape."); return;
-  }
-  const menu = el("menu","");
-  el("line sys","pick a department:");
-  data.categories.forEach((cat,i)=>{
-    const item=document.createElement("span");
-    item.className="item";item.tabIndex=0;
-    item.innerHTML=`<span class='k'>[${i+1}]</span>${esc(cat)}`;
-    const go=()=>selectCategory(cat);
-    item.onclick=go;
-    item.onkeydown=e=>{if(e.key==="Enter")go();};
-    menu.appendChild(item);
+  rawOut.textContent = "";
+  const w = el("wire",
+    `<span>&gt; GET /categories HTTP/1.1</span><br>`+
+    `<span class='dim'>&gt; Host: ${location.host||"localhost:8010"}</span>`);
+  const gen = el("gen", `<span class='spin'>&#9624;</span> AI is stocking the shelves &mdash; <span class='ms'>0</span>ms`);
+  const msEl = gen.querySelector(".ms");
+  const frames=["▙","▛","▜","▟"]; let fi=0;
+  const t0=performance.now();
+  const tick=setInterval(()=>{ msEl.textContent=Math.round(performance.now()-t0);
+    if(!reduce) gen.querySelector(".spin").textContent=frames[fi=(fi+1)%4]; },90);
+
+  return new Promise(resolve=>{
+    const es = new EventSource(API+"/categories");
+    es.onmessage = e=>{
+      let msg;
+      try{ msg=JSON.parse(e.data); }catch{ return; }
+      if(msg.token !== undefined){
+        rawOut.textContent += msg.token;
+        rawPanel.scrollTop = rawPanel.scrollHeight;
+      }
+      if(msg.categories){
+        es.close();
+        clearInterval(tick); gen.remove();
+        const ms=(performance.now()-t0).toFixed(0);
+        w.innerHTML += `<br><span class='stat-ok'>&lt; 200 OK &middot; ${ms}ms</span>`;
+        if(!Array.isArray(msg.categories)||!msg.categories.length){
+          el("line err","catalog unavailable or wrong shape."); resolve(); return;
+        }
+        const menu = el("menu","");
+        el("line sys","pick a department:");
+        msg.categories.forEach((cat,i)=>{
+          const item=document.createElement("span");
+          item.className="item";item.tabIndex=0;
+          item.innerHTML=`<span class='k'>[${i+1}]</span>${esc(cat)}`;
+          const go=()=>selectCategory(cat);
+          item.onclick=go;
+          item.onkeydown=ev=>{if(ev.key==="Enter")go();};
+          menu.appendChild(item);
+        });
+        document.onkeydown=ev=>{const n=+ev.key;
+          if(n>=1&&n<=msg.categories.length) selectCategory(msg.categories[n-1]);};
+        setPrompt("type a number or click a department_");
+        resolve();
+      }
+    };
+    es.onerror = ()=>{
+      es.close();
+      clearInterval(tick); gen.remove();
+      w.innerHTML += `<br><span class='stat-err'>&lt; CONNECTION FAILED</span>`;
+      el("line err","  is the backend up on :8010?");
+      resolve();
+    };
   });
-  document.onkeydown=e=>{const n=+e.key;
-    if(n>=1&&n<=data.categories.length) selectCategory(data.categories[n-1]);};
-  setPrompt("type a number or click a department_");
 }
 function findProducts(obj){
   if(Array.isArray(obj) && obj.length) return obj;
@@ -163,28 +222,64 @@ async function selectCategory(cat){
   document.onkeydown=null;
   el("line ok","&gt; "+esc(cat));
   await setPrompt(`browsing "${cat}"_`);
-  const data = await wireFetch("GET",`/products/${encodeURIComponent(cat.toLowerCase())}`);
-  if(!data){ return; }
-  const items = data.products || findProducts(data);
-  if(!items || !items.length){
-    el("line sys","raw response:");
-    el("wire","<pre>"+esc(JSON.stringify(data,null,2))+"</pre>");
-    return;
-  }
-  for(const it of items){
-    const name = (typeof it === "string") ? it : pick(it,["name","title","product","id"]) ?? "Unnamed";
-    const price = (typeof it === "string") ? null : pick(it,["price","cost","amount"]);
-    const desc = (typeof it === "string") ? null : pick(it,["description","desc","blurb","details"]);
-    const card = el("card",
-      (price!=null?`<span class='price'>${esc(price)}</span>`:"")+
-      `<span class='name'></span>`+
-      (desc?`<div class='desc'></div>`:""));
-    await typeInto(card.querySelector(".name"), String(name), 12);
-    if(desc) await typeInto(card.querySelector(".desc"), String(desc), 6);
-    await sleep(120);
-  }
-  el("line sys",`${items.length} item(s) generated. press a number for another department.`);
-  loadAgainHint();
+  rawOut.textContent = "";
+  document.querySelector(".raw-hdr").textContent = `RAW TOKEN STREAM > /products/${cat.toLowerCase()}`;
+  const path = `/products/${encodeURIComponent(cat.toLowerCase())}`;
+  const w = el("wire",
+    `<span>&gt; GET ${esc(path)} HTTP/1.1</span><br>`+
+    `<span class='dim'>&gt; Host: ${location.host||"localhost:8010"}</span>`);
+  const gen = el("gen", `<span class='spin'>&#9624;</span> AI is stocking the shelves &mdash; <span class='ms'>0</span>ms`);
+  const msEl = gen.querySelector(".ms");
+  const frames=["▙","▛","▜","▟"]; let fi=0;
+  const t0=performance.now();
+  const tick=setInterval(()=>{ msEl.textContent=Math.round(performance.now()-t0);
+    if(!reduce) gen.querySelector(".spin").textContent=frames[fi=(fi+1)%4]; },90);
+
+  return new Promise(resolve=>{
+    const es = new EventSource(API+path);
+    es.onmessage = async e=>{
+      let msg;
+      try{ msg=JSON.parse(e.data); }catch{ return; }
+      if(msg.token !== undefined){
+        rawOut.textContent += msg.token;
+        rawPanel.scrollTop = rawPanel.scrollHeight;
+      }
+      if(msg.products){
+        es.close();
+        clearInterval(tick); gen.remove();
+        const ms=(performance.now()-t0).toFixed(0);
+        w.innerHTML += `<br><span class='stat-ok'>&lt; 200 OK &middot; ${ms}ms</span>`;
+        const items = msg.products || findProducts(msg);
+        if(!items || !items.length){
+          el("line sys","raw response:");
+          el("wire","<pre>"+esc(JSON.stringify(msg,null,2))+"</pre>");
+          resolve(); return;
+        }
+        for(const it of items){
+          const name = (typeof it === "string") ? it : pick(it,["name","title","product","id"]) ?? "Unnamed";
+          const price = (typeof it === "string") ? null : pick(it,["price","cost","amount"]);
+          const desc = (typeof it === "string") ? null : pick(it,["description","desc","blurb","details"]);
+          const card = el("card",
+            (price!=null?`<span class='price'>${esc(price)}</span>`:"")+
+            `<span class='name'></span>`+
+            (desc?`<div class='desc'></div>`:""));
+          await typeInto(card.querySelector(".name"), String(name), 12);
+          if(desc) await typeInto(card.querySelector(".desc"), String(desc), 6);
+          await sleep(120);
+        }
+        el("line sys",`${items.length} item(s) generated. press a number for another department.`);
+        loadAgainHint();
+        resolve();
+      }
+    };
+    es.onerror = ()=>{
+      es.close();
+      clearInterval(tick); gen.remove();
+      w.innerHTML += `<br><span class='stat-err'>&lt; CONNECTION FAILED</span>`;
+      el("line err","  is the backend up on :8010?");
+      resolve();
+    };
+  });
 }
 function loadAgainHint(){ setPrompt("select another department above, or press R to restart_");
   document.onkeydown=e=>{ if(e.key==="r"||e.key==="R") location.reload(); }; }
