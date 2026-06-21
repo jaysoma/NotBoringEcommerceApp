@@ -174,9 +174,7 @@ app = fastapi.FastAPI()
 def get_categories():
     prompt = "Invent 5 fun and creative department names for a fictional ecommerce store."
     raw = ollama.generate("qwen2.5:7b", prompt, format="json")["response"]
-    print("RAW:", repr(raw))
     nodes = extract_list(raw)
-    print("NODES:", nodes)
     names = []
     seen = set()
     for node in nodes:
@@ -188,11 +186,9 @@ def get_categories():
         # Key-as-label: if node is from a string array (single key, empty value), key is the label
         if not name and len(node) == 1 and list(node.values())[0] == '':
             name = list(node.keys())[0] if len(list(node.keys())[0]) > 2 else None
-        print("NODE:", node, "-> NAME:", name)
         if name and name not in seen:
             seen.add(name)
             names.append(name)
-    print("NAMES:", names)
     return {"categories": names}
 
 @app.get("/")
