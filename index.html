@@ -62,17 +62,34 @@
   .sys{color:var(--grn-dim);}
   .ok{color:var(--grn);}
   .err{color:var(--red);}
-  .menu{margin:10px 0 4px;}
-  .menu .item{padding:4px 8px;cursor:pointer;display:inline-block;
+  .menu{margin:10px 0 4px;display:flex;flex-direction:column;gap:2px;}
+  .menu .item{padding:4px 8px;cursor:pointer;display:block;
     border:1px solid transparent;}
   .menu .item:hover,.menu .item:focus{background:var(--grn);color:var(--bg);
     text-shadow:none;outline:none;}
   .menu .item .k{color:var(--amb);margin-right:8px;}
   .menu .item:hover .k,.menu .item:focus .k{color:var(--bg);}
   .card{border:1px solid var(--grn-dim);padding:10px 12px;margin:8px 0;overflow:hidden;}
+  .card:hover{border-color:var(--grn);background:rgba(51,255,102,.04);}
   .card .name{color:var(--grn);font-weight:bold;}
   .card .price{color:var(--amb);float:right;}
   .card .desc{color:var(--grn-dim);font-size:13px;margin-top:4px;}
+  .detail-card{display:flex;flex-direction:row;gap:20px;align-items:flex-start;
+    border:1px solid var(--grn-dim);border-radius:8px;padding:16px;margin:10px 0;}
+  .detail-img-wrap{flex-shrink:0;border:1px solid var(--grn-dim);
+    border-radius:10px;overflow:hidden;line-height:0;}
+  .detail-img{display:block;width:200px;height:200px;object-fit:cover;
+    filter:grayscale(1) sepia(0.6) hue-rotate(70deg) saturate(4) brightness(0.85);}
+  .detail-info{flex:1;display:flex;flex-direction:column;gap:8px;}
+  .detail-name{color:var(--grn);font-size:17px;font-weight:bold;}
+  .detail-price{color:var(--amb);font-size:20px;}
+  .detail-desc{color:var(--grn-dim);font-size:13px;line-height:1.6;}
+  .cart-btn{margin-top:auto;padding:8px 18px;background:var(--amb);color:var(--bg);
+    border:none;font:inherit;font-weight:bold;cursor:pointer;border-radius:4px;
+    text-shadow:none;letter-spacing:.05em;align-self:flex-start;}
+  .cart-btn:hover{background:var(--grn);color:var(--bg);}
+  .back-btn{color:var(--amb);cursor:pointer;border:1px solid var(--amb-dim);padding:4px 10px;display:inline-block;margin-top:8px;}
+  .back-btn:hover{background:var(--amb);color:var(--bg);text-shadow:none;}
   .prompt{margin-top:18px;}
   .ps1{color:var(--amb);}
   .cursor{display:inline-block;width:9px;height:1.05em;background:var(--grn);
@@ -91,13 +108,15 @@
 </div>
 <div class="term" id="term">
   <div id="stream"></div>
+  <div id="products"></div>
   <div class="prompt"><span class="ps1">C:\STORE&gt;</span> <span id="ps"></span><span class="cursor"></span></div>
 </div>
 <script>
-const API = "";
+const API = location.pathname.startsWith("/shop") ? "/shop" : "";
 const reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
 const sleep = ms => new Promise(r=>setTimeout(r, reduce?0:ms));
 const stream = document.getElementById("stream");
+const productsEl = document.getElementById("products");
 const ps = document.getElementById("ps");
 const rawOut = document.getElementById("rawOut");
 const rawPanel = document.getElementById("rawPanel");
@@ -123,16 +142,16 @@ const boot = [
   "NOTBIOS v8.010  (C) 2026 NotAmazon Systems",
   "Memory ............ 16384K OK",
   "Inventory daemon .. <span class='ok'>ONLINE</span>",
-  "Qwen 2.5 (7B) ..... <span class='ok'>LOADED</span>",
+  "Qwen 2.5 (3B) ..... <span class='ok'>LOADED</span>",
   "",
 ];
 const ART =
-`███╗   ██╗ ██████╗ ████████╗     █████╗ ███╗   ███╗ █████╗ ███████╗ ██████╗ ███╗   ██╗
-████╗  ██║██╔═══██╗╚══██╔══╝    ██╔══██╗████╗ ████║██╔══██╗╚══███╔╝██╔═══██╗████╗  ██║
-██╔██╗ ██║██║   ██║   ██║       ███████║██╔████╔██║███████║  ███╔╝ ██║   ██║██╔██╗ ██║
-██║╚██╗██║██║   ██║   ██║       ██╔══██║██║╚██╔╝██║██╔══██║ ███╔╝  ██║   ██║██║╚██╗██║
-██║ ╚████║╚██████╔╝   ██║       ██║  ██║██║ ╚═╝ ██║██║  ██║███████╗╚██████╔╝██║ ╚████║
-╚═╝  ╚═══╝ ╚═════╝    ╚═╝       ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝`;
+` █████╗ ███╗   ███╗ █████╗ ███████╗ ██████╗ ███╗   ██╗███████╗
+██╔══██╗████╗ ████║██╔══██╗╚══███╔╝██╔═══██╗████╗  ██║██╔════╝
+███████║██╔████╔██║███████║  ███╔╝ ██║   ██║██╔██╗ ██║█████╗
+██╔══██║██║╚██╔╝██║██╔══██║ ███╔╝  ██║   ██║██║╚██╗██║██╔══╝
+██║  ██║██║ ╚═╝ ██║██║  ██║███████╗╚██████╔╝██║ ╚████║███████╗
+╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝`;
 
 async function start(){
   for(const b of boot){ el("line sys", b); await sleep(160); }
@@ -220,11 +239,14 @@ function findProducts(obj){
 function inferFields(it){
   if(typeof it === "string") return {name:it, price:null, desc:null};
   const vals = Object.entries(it).filter(([,v])=>typeof v==="string" && v.trim());
-  const priceEntry = vals.find(([k,v])=>/price|cost|amount/i.test(k) || /^\$[\d.,]+/.test(v));
+  const isPrice = v => /^\$?[\d]+[.,][\d]{2,}$/.test(v.trim());
+  const priceEntry = vals.find(([k,v])=>/price|cost|amount/i.test(k) && isPrice(v))
+    ?? vals.find(([,v])=>isPrice(v));
   const price = priceEntry ? priceEntry[1] : null;
   const rest = vals.filter(e=>e!==priceEntry && !/category|type|tag/i.test(e[0]));
   // prefer explicit name key, else shortest non-desc string
   const nameEntry = rest.find(([k])=>/^(name|title|product|item)$/i.test(k))
+    ?? rest.find(([,v])=>v.includes(" ") && v.length<80)
     ?? [...rest].sort((a,b)=>a[1].length-b[1].length)[0];
   const name = nameEntry?.[1] ?? "Unnamed";
   const descEntry = rest.filter(e=>e!==nameEntry).sort((a,b)=>b[1].length-a[1].length)[0];
@@ -255,17 +277,34 @@ async function selectCategory(cat){
         if(!items || !items.length){
           el("line sys","no products returned."); resolve(); return;
         }
-        for(const it of items){
+        productsEl.innerHTML = "";
+        const filtered = items.filter(it=>{
+          const {name} = inferFields(it);
+          return name && name!=="Unnamed" && !/^[a-zA-Z_]+\d+$/.test(name);
+        });
+        // render cards immediately, fetch images in parallel
+        const cards = filtered.map(it=>{
           const {name, price, desc} = inferFields(it);
-          const card = el("card",
-            (price!=null ? `<span class='price'>${esc(price)}</span>` : "")+
-            `<span class='name'></span>`+
-            (desc?`<div class='desc'></div>`:""));
-          await typeInto(card.querySelector(".name"), String(name), 12);
-          if(desc) await typeInto(card.querySelector(".desc"), String(desc), 6);
-          await sleep(120);
-        }
-        el("line sys",`${items.length} item(s) generated. press a number for another department.`);
+          const card = document.createElement("div");
+          card.className="detail-card"; productsEl.appendChild(card); scroll();
+          const wrap = document.createElement("div"); wrap.className="detail-img-wrap";
+          const img = document.createElement("img"); img.className="detail-img";
+          img.src=""; wrap.appendChild(img); card.appendChild(wrap);
+          const info = document.createElement("div"); info.className="detail-info";
+          const nameEl=document.createElement("div"); nameEl.className="detail-name"; nameEl.textContent=name; info.appendChild(nameEl);
+          if(price){const p=document.createElement("div");p.className="detail-price";p.textContent=price;info.appendChild(p);}
+          if(desc){const d=document.createElement("div");d.className="detail-desc";d.textContent=desc;info.appendChild(d);}
+          const btn=document.createElement("button");btn.className="cart-btn";btn.textContent="ADD TO CART";
+          btn.onclick=()=>{btn.textContent="✓ ADDED";btn.style.background="var(--grn)";};
+          info.appendChild(btn); card.appendChild(info);
+          return {img, name};
+        });
+        // fire all image fetches in parallel
+        cards.forEach(({img, name})=>{
+          fetch(API+`/image/${encodeURIComponent(name)}`)
+            .then(r=>r.json()).then(d=>{ if(d.url) img.src=d.url; }).catch(()=>{});
+        });
+        el("line sys",`${filtered.length} item(s) generated.`);
         loadAgainHint();
         resolve();
       }
@@ -281,6 +320,51 @@ async function selectCategory(cat){
 
 function loadAgainHint(){ setPrompt("select another department above, or press R to restart_");
   document.onkeydown=e=>{ if(e.key==="r"||e.key==="R") location.reload(); }; }
+
+async function showProduct({name, price, desc}){
+  document.onkeydown=null;
+  stream.innerHTML="";
+  await setPrompt(`loading "${name}"_`);
+  const keywords = encodeURIComponent(name);
+  const {t0, finish} = startWire(`/image/${keywords}`);
+  el("line sys", `searching image: ${esc(name)} ...`);
+  try{
+    const res = await fetch(API+`/image/${keywords}`);
+    finish(res.ok, (performance.now()-t0).toFixed(0));
+    const data = await res.json();
+    const card = document.createElement("div");
+    card.className = "detail-card";
+    // image
+    const wrap = document.createElement("div");
+    wrap.className = "detail-img-wrap";
+    if(data.url){
+      const img = document.createElement("img");
+      img.className = "detail-img"; img.src = data.url;
+      wrap.appendChild(img);
+    }
+    card.appendChild(wrap);
+    // info panel
+    const info = document.createElement("div");
+    info.className = "detail-info";
+    const nameEl = document.createElement("div"); nameEl.className="detail-name"; info.appendChild(nameEl);
+    if(price){ const p=document.createElement("div"); p.className="detail-price"; p.textContent=price; info.appendChild(p); }
+    if(desc){ const d=document.createElement("div"); d.className="detail-desc"; info.appendChild(d); await typeInto(d, desc, 3); }
+    const cartBtn = document.createElement("button");
+    cartBtn.className="cart-btn"; cartBtn.textContent="ADD TO CART";
+    cartBtn.onclick=()=>{ cartBtn.textContent="✓ ADDED"; cartBtn.style.background="var(--grn)"; };
+    info.appendChild(cartBtn);
+    card.appendChild(info);
+    stream.appendChild(card);
+    await typeInto(nameEl, name, 10);
+    if(data.photographer) el("line sys",`photo: ${esc(data.photographer)} via Pexels`);
+  }catch(err){
+    el("line err", `image fetch failed: ${esc(err.message)}`);
+  }
+  const back = el("back-btn","&larr; back to products");
+  back.onclick=()=>location.reload();
+  setPrompt("press R or click back to return_");
+  document.onkeydown=e=>{if(e.key==="r"||e.key==="R") location.reload();};
+}
 start();
 </script>
 </body>

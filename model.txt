@@ -1,0 +1,7 @@
+model=qwen2.5:3b
+
+[categories]
+Invent 8 fun and creative department names for a fictional ecommerce store. Reply with JSON only: {"departments": ["Name1", "Name2", "Name3", "Name4", "Name5", "Name6", "Name7", "Name8"]}
+
+[products]
+Invent 7-9 fictional products for the "{category}" department of a whimsical ecommerce store. Reply with JSON only: {"products": [{"name": "Product Name", "price": "$XX.XX", "description": "One sentence."}, ...]}

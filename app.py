@@ -2,11 +2,55 @@ import fastapi
 import uvicorn
 import ollama
 import json
+import urllib.request
+import urllib.parse
+import re
+import unicodedata
 from pathlib import Path
 
 
-_Q = '\x00'  # sentinel replacing all " characters before parsing
-_OPEN_CLOSE = {'{': '}', '[': ']', _Q: _Q}
+def _load_config():
+    cfg = {}
+    model_txt = Path(__file__).parent / "model.txt"
+    current_section = None
+    for line in model_txt.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith('[') and line.endswith(']'):
+            current_section = line[1:-1]
+            cfg[current_section] = ''
+        elif '=' in line and current_section is None:
+            k, _, v = line.partition('=')
+            cfg[k.strip()] = v.strip()
+        elif current_section:
+            cfg[current_section] = (cfg[current_section] + '\n' + line).lstrip('\n')
+    return cfg
+
+_CFG = _load_config()
+_MODEL = _CFG['model']
+PEXELS_KEY = (Path(__file__).parent / "pexels.key").read_text().strip()
+
+
+
+_Q = '\x1f'  # ASCII Unit Separator — sentinel replacing all " before parsing
+
+_SYMMETRIC = frozenset(f"\"'`|~{_Q}")  # chars that are their own closing delimiter
+
+def _close(open_ch: str) -> str | None:
+    """Derive closing token from opening token — no hardcoded map.
+    Unicode Ps (open punctuation) finds its Pe pair by ASCII offset.
+    Known quote-like chars are symmetric (close == open).
+    Everything else (: , . - $ % etc.) is NOT a delimiter.
+    """
+    if open_ch in _SYMMETRIC:
+        return open_ch
+    if unicodedata.category(open_ch) == 'Ps':
+        for delta in (1, 2):
+            candidate = chr(ord(open_ch) + delta)
+            if unicodedata.category(candidate) == 'Pe':
+                return candidate
+    return None
 
 def _preprocess(s: str) -> str:
     s = s.replace('**', '"')
@@ -15,8 +59,8 @@ def _preprocess(s: str) -> str:
 
 def _find_match(s: str, open_pos: int) -> int:
     open_ch = s[open_pos]
-    close_ch = _OPEN_CLOSE.get(open_ch)
-    if not close_ch:
+    close_ch = _close(open_ch)
+    if close_ch is None:
         return -1
     if open_ch == _Q:
         return s.find(_Q, open_pos + 1)
@@ -42,7 +86,7 @@ def _parse(s: str) -> list:
     if not s:
         return []
     open_ch = s[0]
-    if open_ch not in _OPEN_CLOSE:
+    if _close(open_ch) is None:
         return [s]
     close_pos = _find_match(s, 0)
     if close_pos == -1:
@@ -54,7 +98,7 @@ def _parse(s: str) -> list:
     if not inner.strip():
         return []
     inner_delim = inner.lstrip()[0]
-    if inner_delim not in _OPEN_CLOSE:
+    if _close(inner_delim) is None:
         return [inner.strip()]
     children = []
     i = 0
@@ -69,7 +113,7 @@ def _parse(s: str) -> list:
             if subtree:
                 children.append(subtree if len(subtree) > 1 else subtree[0])
             i = match + 1
-        elif c in _OPEN_CLOSE and c != inner_delim:
+        elif _close(c) is not None and c != inner_delim:
             match = _find_match(inner, i)
             if match == -1:
                 break
@@ -173,32 +217,58 @@ app = fastapi.FastAPI()
 @app.get("/categories")
 def get_categories():
     def stream():
-        prompt = "Invent 5 fun and creative department names for a fictional ecommerce store."
-        iterator = ollama.generate("qwen2.5:7b", prompt, stream=True, format="json")
+        prompt = _CFG['categories']
+        iterator = ollama.generate(_MODEL, prompt, stream=True, format="json")
         full_response = ""
         for chunk in iterator:
             token = chunk["response"]
             full_response += token
             yield f"data: {json.dumps({'token': token})}\n\n"
-        nodes = extract_list(full_response)
         names = []
-        seen = set()
-        for node in nodes:
-            name = min(
-                (v for v in node.values() if isinstance(v, str) and len(v) > 2),
-                key=len, default=None
-            )
-            if not name and len(node) == 1 and list(node.values())[0] == '':
-                name = list(node.keys())[0] if len(list(node.keys())[0]) > 2 else None
-            if name and name not in seen:
-                seen.add(name)
-                names.append(name)
+        try:
+            parsed = json.loads(full_response)
+            # find the first list value — model may wrap under any key
+            candidates = parsed if isinstance(parsed, list) else (
+                parsed.get("departments") or parsed.get("categories") or
+                next((v for v in parsed.values() if isinstance(v, list)), []))
+            for item in candidates:
+                if isinstance(item, str) and len(item) > 2:
+                    names.append(item)
+                elif isinstance(item, dict):
+                    v = next((v for v in item.values() if isinstance(v, str) and len(v) > 2), None)
+                    if v:
+                        names.append(v)
+        except Exception:
+            pass
+        if not names:
+            # fallback to extract_list for unexpected shapes
+            for node in extract_list(full_response):
+                if len(node) == 1:
+                    k, v = next(iter(node.items()))
+                    name = v if (isinstance(v, str) and len(v) > 2) else (k if len(k) > 2 else None)
+                    if name and name not in names:
+                        names.append(name)
         yield f"data: {json.dumps({'categories': names})}\n\n"
     return fastapi.responses.StreamingResponse(
         stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+@app.get("/image/{keywords}")
+def get_image(keywords: str):
+    encoded = urllib.parse.quote(keywords)
+    req = urllib.request.Request(
+        f"https://api.pexels.com/v1/search?query={encoded}&per_page=1&orientation=portrait",
+        headers={"Authorization": PEXELS_KEY, "User-Agent": "NotAmazon/1.0"}
+    )
+    with urllib.request.urlopen(req) as r:
+        data = json.loads(r.read())
+    photos = data.get("photos", [])
+    if not photos:
+        return {"ascii": None, "error": "no photos found"}
+    url = photos[0]["src"]["medium"]
+    return {"url": url, "photographer": photos[0].get("photographer", "")}
 
 @app.get("/")
 def read_root():
@@ -207,18 +277,26 @@ def read_root():
 @app.get("/products/{category}")
 def get_products(category: str):
     def stream():
-        prompt = f'Invent 5-7 fun fictional products with name and price for the "{category}" department of a whimsical ecommerce store.'
-        iterator = ollama.generate("qwen2.5:7b", prompt, stream=True, format="json")
+        prompt = _CFG['products'].replace('{category}', category)
+        iterator = ollama.generate(_MODEL, prompt, stream=True, format="json")
         full_response = ""
         for chunk in iterator:
             token = chunk["response"]
             full_response += token
             yield f"data: {json.dumps({'token': token})}\n\n"
-        nodes = extract_list(full_response)
-        products = [
-            n for n in nodes
-            if not any(v.lower() == category.lower() for v in n.values() if isinstance(v, str))
-        ]
+        products = []
+        try:
+            parsed = json.loads(full_response)
+            # model may wrap in any key; find the first list value
+            if isinstance(parsed, list):
+                products = parsed
+            else:
+                for v in parsed.values():
+                    if isinstance(v, list):
+                        products = v
+                        break
+        except Exception:
+            products = extract_list(full_response)
         yield f"data: {json.dumps({'products': products})}\n\n"
     return fastapi.responses.StreamingResponse(
         stream(),
